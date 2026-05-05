@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>双队并行计时系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            padding: 20px 0;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        /* 双队容器 - Flex布局实现左右并排 */
+        .dual-container {
+            display: flex;
+            justify-content: space-around;
+            gap: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        /* 单个队伍面板样式 */
+        .team-panel {
+            flex: 1;
+            min-width: 400px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        
+        .team-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .team-name {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+        
+        .status-indicator {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        
+        .status-idle { background: #ff9800; color: white; }
+        .status-running { background: #4caf50; color: white; animation: pulse 1.5s infinite; }
+        .status-paused { background: #9c27b0; color: white; }
+        .status-stopped { background: #f44336; color: white; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .timer-display {
+            font-size: 3em;
+            font-weight: bold;
+            text-align: center;
+            margin: 30px 0;
+            font-family: 'Courier New', monospace;
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            border-radius: 10px;
+            letter-spacing: 2px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 15px;
+            font-size: 1em;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-start { background: #4caf50; color: white; }
+        .btn-pause { background: #ff9800; color: white; }
+        .btn-stop { background: #f44336; color: white; }
+        .btn-step { background: #2196f3; color: white; }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        /* 步骤记录区域 */
+        .steps {
+            margin-top: 20px;
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .step-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px dashed rgba(255,255,255,0.2);
+        }
+
+        /* 响应式适配 */
+        @media (max-width: 768px) {
+            .dual-container {
+                flex-direction: column;
+            }
+            .team-panel {
+                min-width: 100%;
+            }
+            .timer-display {
+                font-size: 2.2em;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🏎️ 双队并行计时大屏</h1>
+
+    <div class="dual-container">
+        <!-- 队伍 A 面板 -->
+        <div class="team-panel" id="teamA">
+            <div class="team-header">
+                <div class="team-name">队伍 A</div>
+                <div id="statusA" class="status-indicator status-idle">待机中</div>
+            </div>
+            
+            <div id="timerA" class="timer-display">00:00:00.000</div>
+
+            <div class="steps">
+                <h3>步骤记录</h3>
+                <div class="step-item">
+                    <span>1. 组装</span>
+                    <span id="step1A">--:--:--</span>
+                </div>
+                <div class="step-item">
+                    <span>2. 运行</span>
+                    <span id="step2A">--:--:--</span>
+                </div>
+                <div class="step-item">
+                    <span>3. 拆解</span>
+                    <span id="step3A">--:--:--</span>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="startA" class="btn-start" onclick="startTeam('A')">开始计时</button>
+                <button id="pauseA" class="btn-pause" onclick="pauseTeam('A')" disabled>暂停</button>
+                <button id="stepA" class="btn-step" onclick="recordStep('A', getCurrentStep('A'))" disabled>记录步骤</button>
+                <button id="stopA" class="btn-stop" onclick="stopTeam('A')" disabled>结束</button>
+            </div>
+        </div>
+
+        <!-- 队伍 B 面板 -->
+        <div class="team-panel" id="teamB">
+            <div class="team-header">
+                <div class="team-name">队伍 B</div>
+                <div id="statusB" class="status-indicator status-idle">待机中</div>
+            </div>
+            
+            <div id="timerB" class="timer-display">00:00:00.000</div>
+
+            <div class="steps">
+                <h3>步骤记录</h3>
+                <div class="step-item">
+                    <span>1. 组装</span>
+                    <span id="step1B">--:--:--</span>
+                </div>
+                <div class="step-item">
+                    <span>2. 运行</span>
+                    <span id="step2B">--:--:--</span>
+                </div>
+                <div class="step-item">
+                    <span>3. 拆解</span>
+                    <span id="step3B">--:--:--</span>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="startB" class="btn-start" onclick="startTeam('B')">开始计时</button>
+                <button id="pauseB" class="btn-pause" onclick="pauseTeam('B')" disabled>暂停</button>
+                <button id="stepB" class="btn-step" onclick="recordStep('B', getCurrentStep('B'))" disabled>记录步骤</button>
+                <button id="stopB" class="btn-stop" onclick="stopTeam('B')" disabled>结束</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 存储队伍ID的映射
+        const teamMap = {
+            A: null, // 动态获取
+            B: null
+        };
+
+        // 页面加载完成后初始化
+        window.onload = async function() {
+            // 首先检查是否有队伍ID存储在localStorage中
+            const savedTeamA = localStorage.getItem('teamA_id');
+            const savedTeamB = localStorage.getItem('teamB_id');
+
+            // 如果没有存储的ID，则自动创建两个队伍
+            if (!savedTeamA || !savedTeamB) {
+                await createInitialTeams();
+            } else {
+                // 检查队伍是否还存在（防止后端重启数据丢失）
+                const status = await fetchTeamStatus();
+                if (!status[savedTeamA] || !status[savedTeamB]) {
+                    await createInitialTeams();
+                } else {
+                    teamMap.A = savedTeamA;
+                    teamMap.B = savedTeamB;
+                    // 初始化UI
+                    updateUI();
+                    // 启动轮询
+                    startPolling();
+                }
+            }
+        };
+
+        // 创建初始队伍
+        async function createInitialTeams() {
+            // 清除旧数据
+            await fetch('/api/teams', { method: 'DELETE' }); // 假设有一个清空接口，或者后端重启会自动清空
+            
+            // 创建队伍A
+            const resA = await fetch('/api/teams', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: '队伍 A' })
+            });
+            const dataA = await resA.json();
+            teamMap.A = dataA.team.team_id;
+            localStorage.setItem('teamA_id', teamMap.A);
+
+            // 创建队伍B
+            const resB = await fetch('/api/teams', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: '队伍 B' })
+            });
+            const dataB = await resB.json();
+            teamMap.B = dataB.team.team_id;
+            localStorage.setItem('teamB_id', teamMap.B);
+
+            updateUI();
+            startPolling();
+        }
+
+        // 启动轮询以更新时间
+        function startPolling() {
+            setInterval(async () => {
+                const status = await fetchTeamStatus();
+                updateTimers(status);
+            }, 100); // 每100ms更新一次以保证毫秒级精度
+        }
+
+        // 获取所有队伍状态
+        async function fetchTeamStatus() {
+            try {
+                const res = await fetch('/api/teams/status');
+                return await res.json();
+            } catch (err) {
+                console.error('获取状态失败:', err);
+                return {};
+            }
+        }
+
+        // 更新UI显示
+        function updateUI() {
+            // 这里只是初始化按钮状态，实际数据由轮询更新
+            document.getElementById('teamA').style.opacity = '0.7';
+            document.getElementById('teamB').style.opacity = '0.7';
+        }
+
+        // 更新计时器显示
+        function updateTimers(status) {
+            ['A', 'B'].forEach(side => {
+                const teamId = teamMap[side];
+                if (!teamId || !status[teamId]) return;
+
+                const team = status[teamId];
+                const timerEl = document.getElementById(`timer${side}`);
+                const statusEl = document.getElementById(`status${side}`);
+                const startBtn = document.getElementById(`start${side}`);
+                const pauseBtn = document.getElementById(`pause${side}`);
+                const stepBtn = document.getElementById(`step${side}`);
+                const stopBtn = document.getElementById(`stop${side}`);
+
+                // 更新总耗时显示
+                const timeStr = formatTime(team.total_elapsed);
+                timerEl.textContent = timeStr;
+
+                // 更新状态样式
+                statusEl.className = `status-indicator status-${team.status}`;
+                statusEl.textContent = getStatusText(team.status);
+
+                // 更新按钮状态逻辑
+                startBtn.disabled = team.status !== 'idle' && team.status !== 'paused';
+                pauseBtn.disabled = team.status !== 'running';
+                stopBtn.disabled = team.status !== 'running' && team.status !== 'paused';
+                
+                // 步骤按钮：只有在运行中且步骤未完成时才可点击
+                const currentStep = getCurrentStep(side);
+                stepBtn.disabled = team.status !== 'running' || team.step_times[currentStep] !== null || currentStep > 3;
+                stepBtn.textContent = `记录步骤 ${currentStep}`;
+
+                // 更新步骤记录显示
+                for (let i = 1; i <= 3; i++) {
+                    const stepEl = document.getElementById(`step${i}${side}`);
+                    if (team.step_times[i]) {
+                        stepEl.textContent = formatTime(team.step_times[i]);
+                    } else {
+                        stepEl.textContent = '--:--:--';
+                    }
+                }
+            });
+        }
+
+        // 辅助函数：获取当前应该记录的步骤号
+        function getCurrentStep(side) {
+            const teamId = teamMap[side];
+            if (!teamId) return 1;
+            
+            const status = fetchTeamStatusSync(teamId); // 简化版同步获取
+            if (!status) return 1;
+            
+            if (!status.step_times[1]) return 1;
+            if (!status.step_times[2]) return 2;
+            if (!status.step_times[3]) return 3;
+            return 4; // 已完成所有步骤
+        }
+
+        // 简化的同步获取状态（用于getCurrentStep，实际项目中建议优化）
+        function fetchTeamStatusSync(teamId) {
+            let result = null;
+            // 这里为了简单，我们直接从全局状态对象中获取（需要在updateTimers中维护一个全局变量）
+            // 实际上，由于JavaScript是单线程的，在轮询间隔内这个值是相对稳定的
+            // 这是一个简化处理
+            return window.lastTeamStatus?.[teamId] || null;
+        }
+
+        // 格式化时间 (秒 -> MM:SS.mmm)
+        function formatTime(seconds) {
+            if (seconds === null || seconds === undefined) seconds = 0;
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            const ms = Math.floor((seconds - Math.floor(seconds)) * 1000);
+            return `${mins.toString().padStart(2, '0')}:${secs.toFixed(3).padStart(6, '0')}`;
+        }
+
+        // 状态文本映射
+        function getStatusText(status) {
+            const map = {
+                'idle': '待机',
+                'running': '计时中',
+                'paused': '已暂停',
+                'stopped': '已结束'
+            };
+            return map[status] || status;
+        }
+
+        // API 调用函数
+        async function startTeam(side) {
+            const teamId = teamMap[side];
+            if (!teamId) return;
+            await fetch(`/api/teams/${teamId}/start`, { method: 'POST' });
+        }
+
+        async function pauseTeam(side) {
+            const teamId = teamMap[side];
+            if (!teamId) return;
+            await fetch(`/api/teams/${teamId}/pause`, { method: 'POST' });
+        }
+
+        async function stopTeam(side) {
+            const teamId = teamMap[side];
+            if (!teamId) return;
+            await fetch(`/api/teams/${teamId}/stop`, { method: 'POST' });
+        }
+
+        async function recordStep(side, step) {
+            const teamId = teamMap[side];
+            if (!teamId || step > 3) return;
+            await fetch(`/api/teams/${teamId}/record_step/${step}`, { method: 'POST' });
+        }
+
+        // 为了在getCurrentStep中使用，我们在轮询时保存一份状态
+        let intervalId = null;
+        function startPolling() {
+            intervalId = setInterval(async () => {
+                const status = await fetchTeamStatus();
+                window.lastTeamStatus = status; // 临时存储供同步读取
+                updateTimers(status);
+            }, 100);
+        }
+    </script>
+</body>
+</html>
